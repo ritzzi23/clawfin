@@ -36,7 +36,8 @@ async function executeAction(
         const result = await client.tools.execute(slug, {
             arguments: args,
             userId: ENTITY_ID,
-        });
+            dangerouslySkipVersionCheck: true,
+        } as any);
         return result;
     } catch (err: any) {
         const msg = err?.message || String(err);
@@ -98,10 +99,10 @@ export async function logDealToSheets(deal: DealForEmail): Promise<boolean> {
     }
 
     console.log("[Composio] Logging deal to Google Sheets...");
-    const result = await executeAction("GOOGLESHEETS_SHEET_APPEND_ROW", {
-        spreadsheet_id: spreadsheetId,
-        sheet_id: "Sheet1",
-        values: [
+    const result = await executeAction("GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND", {
+        spreadsheetId,
+        range: "Sheet1!A:H",
+        values: [[
             new Date().toISOString(),
             deal.productName,
             deal.winnerSeller,
@@ -110,7 +111,8 @@ export async function logDealToSheets(deal: DealForEmail): Promise<boolean> {
             deal.cashbackAmount.toFixed(2),
             deal.effectivePrice.toFixed(2),
             deal.savings.toFixed(2),
-        ],
+        ]],
+        valueInputOption: "RAW",
     });
     if (result) console.log("[Composio] Sheets ✓");
     return !!result;
