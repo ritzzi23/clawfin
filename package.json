@@ -1,31 +1,31 @@
 {
   "name": "clawfin",
-  "version": "1.0.0",
-  "description": "Group chat negotiation agents — ClawHack NYC 2026",
-  "main": "dist/index.js",
+  "version": "2.0.0",
+  "description": "Group chat negotiation agents via XMTP — ClawHack NYC 2026",
+  "type": "module",
   "scripts": {
     "build": "tsc",
-    "gen:keys": "ts-node scripts/gen-keys.ts",
-    "start:buyer": "ts-node agents/buyer-agent.ts",
-    "start:sellers": "ts-node agents/start-sellers.ts",
+    "gen:keys": "node --import tsx/esm scripts/gen-keys.ts",
+    "start:buyer": "node --import tsx/esm agents/buyer-agent.ts",
+    "start:sellers": "node --import tsx/esm agents/start-sellers.ts",
     "start:all": "concurrently \"npm run start:buyer\" \"npm run start:sellers\"",
-    "setup:group": "ts-node scripts/create-group.ts",
-    "test:openrouter": "ts-node scripts/test-openrouter.ts",
-    "composio:connect": "ts-node scripts/composio-connect.ts"
+    "setup:group": "node --import tsx/esm scripts/create-group.ts",
+    "test:openrouter": "node --import tsx/esm scripts/test-openrouter.ts",
+    "composio:connect": "node --import tsx/esm scripts/composio-connect.ts",
+    "join:group": "node --import tsx/esm scripts/join-group.ts",
+    "add:me": "node --import tsx/esm scripts/add-me.ts"
   },
   "dependencies": {
-    "@composio/core": "^0.6.3",
-    "@openrouter/sdk": "^0.0.1",
-    "@xmtp/node-sdk": "^0.0.34",
+    "@xmtp/agent-sdk": "latest",
     "axios": "^1.7.9",
     "dotenv": "^16.4.7",
-    "openai": "^4.77.0",
-    "viem": "^2.21.54"
+    "openai": "^4.77.0"
   },
   "devDependencies": {
     "@types/node": "^22.13.4",
+    "@xmtp/convos-cli": "^0.3.2",
     "concurrently": "^9.1.2",
-    "ts-node": "^10.9.2",
+    "tsx": "^4.19.3",
     "typescript": "^5.7.3"
   }
 }

@@ -1,125 +1,93 @@
-# ClawFin 🏷️
+# ClawFin 🏷️ — Group Deal Negotiation via XMTP Multi-Agent
 
-**"Drop a product in a group chat. Three OpenClaw agents negotiate the best deal — live, in the thread."**
+> **ClawHack NYC 2026** — Built on XMTP + OpenRouter + Composio
 
-Built at **ClawHack NYC 2026** | Theme: Group Agents
+A team of **5 AI agents** in a Convos group chat that negotiate product deals in real-time. Each agent has its own personality, tools, and strategy — coordinating through XMTP using `@xmtp/agent-sdk`.
 
 ---
 
-## What It Does
-
-A Convos group chat with 3 OpenClaw agents coordinating in real time:
+## Agents
 
 | Agent | Role | Strategy |
-|-------|------|----------|
-| 🤖 **ClawBot** | Buyer orchestrator | Negotiates aggressively, plays sellers against each other, ranks offers by effective price after card rewards |
-| ⚡ **DealDasher** | Seller #1 | Aggressive discounter — drops fast, creates urgency |
-| 🎁 **BundleKing** | Seller #2 | Value bundler — adds accessories + warranty each round instead of dropping price |
+|---|---|---|
+| 🤖 **ClawBot** | Buyer Orchestrator | Drives negotiation, plays sellers against each other, ranks deals by effective price (including credit card rewards) |
+| ⚡ **DealDasher** | Seller | Aggressive discounter — drops price fast, creates urgency |
+| 🎁 **BundleKing** | Seller | Value bundler — adds accessories/warranties instead of dropping price |
+| 💎 **PremiumHub** | Seller | Firm pricing — holds near MSRP, emphasizes quality |
+| 🔥 **FlashDeals** | Seller | Scarcity seller — "Only 2 left!", creates FOMO, beats everyone on speed |
 
-### Demo Flow
+---
 
-1. Human types: `"Find me the best deal on AirPods Max, budget $450"`
-2. ClawBot opens negotiations with both sellers simultaneously
-3. Sellers respond with distinct personalities and strategies in the group thread
-4. Human can interject mid-negotiation: `"No refurbished"` — ClawBot adapts immediately
-5. After 3–4 rounds, ClawBot posts a ranked DEAL SUMMARY with credit card optimization
-6. Composio fires: deal summary emailed to inbox + logged to Google Sheets
+## How It Works
+
+1. Open Convos app → join the **ClawFin Deal Room** group
+2. Type: `Find me the best deal on AirPods Max, budget $450`
+3. **ClawBot** kicks off the negotiation with all 4 sellers
+4. Each seller responds with their opening offer (distinct personality)
+5. ClawBot runs 4 rounds, pressing sellers against each other
+6. Type mid-negotiation: `No refurbished items` → ClawBot picks it up
+7. ClawBot posts a **DEAL SUMMARY** with credit card recommendation
+8. **Composio** fires: deal summary sent to Gmail + logged to Google Sheets
+
+---
+
+## Quick Start
+
+```bash
+# 1. Install deps
+npm install
+
+# 2. Set your OpenRouter API key in .env
+# Get from: openrouter.ai
+
+# 3. Generate wallet + DB encryption keys for all 5 agents
+npm run gen:keys
+
+# 4. Create the XMTP group (all agents must have keys first)
+npm run setup:group
+# → Copy the printed CONVOS_GROUP_ID= into your .env
+
+# 5. Start all agents
+npm run start:all
+
+# 6. Open Convos, join the group, type a deal request!
+```
+
+---
+
+## Sponsors Used
+
+| Sponsor | How |
+|---|---|
+| **XMTP / Convos** | Group chat layer. All 5 agents communicate via Convos on XMTP. |
+| **OpenRouter** | LLM provider. Claude for ClawBot (buyer), Llama 3.1 for sellers. |
+| **Composio** | Post-deal: sends Gmail summary + logs to Google Sheets automatically. |
+| **Auth0** | Secures Composio OAuth tokens for Gmail/Sheets. |
+| **Vapi** | (Stretch) Voice deal summary narrated after negotiation completes. |
+| **ElevenLabs** | (Stretch) Powers Vapi's TTS for voice message in group chat. |
+| **Zo Computer** | (Stretch) Host agents on Zo ($30 free credits). |
 
 ---
 
 ## Architecture
 
 ```
-    CONVOS GROUP CHAT (XMTP)
-    ─────────────────────────
-    You + 3 OpenClaw Agents
-              │
-              │ XMTP
-              ▼
-    ┌─────────────────────┐
-    │  OPENCLAW GATEWAY   │
-    │                     │
-    │  clawbuyer ─────────┼── workspace-clawbuyer/
-    │  dealdash  ─────────┼── workspace-dealdash/
-    │  bundleking ────────┼── workspace-bundleking/
-    │                     │
-    │  LLM: OpenRouter    │
-    │  Post-deal: Composio│
-    └─────────────────────┘
-```
-
-Each agent has its own isolated workspace with a `SOUL.md` personality, `AGENTS.md` rules, and custom skills. OpenClaw handles routing, isolation, and execution — no custom agent runtime code.
-
----
-
-## Tech Stack
-
-| Layer | Tool |
-|-------|------|
-| **Group Chat** | XMTP + Convos |
-| **Execution** | OpenClaw gateway (multi-agent, workspace-isolated) |
-| **LLM** | OpenRouter — Claude 3.5 Haiku (buyer), Llama 3.1 8B free (sellers) |
-| **Post-deal** | Composio (Gmail + Google Sheets) |
-
----
-
-## Quick Start
-
-### 1. Install dependencies
-
-```bash
-npm install
-npm install -g openclaw@latest
-openclaw onboard --install-daemon
-```
-
-### 2. Generate wallet keys
-
-```bash
-npx ts-node scripts/gen-keys.ts
-# Copy the output into .env
-```
-
-### 3. Configure environment
-
-```bash
-cp .env.example .env
-# Required: OPENROUTER_API_KEY, wallet keys, CONVOS_GROUP_ID
-# Optional: COMPOSIO_API_KEY, USER_EMAIL, DEAL_TRACKER_SHEET_ID
-```
-
-### 4. Create the Convos group
-
-```bash
-npm run setup:group
-# Copy the Group ID into .env as CONVOS_GROUP_ID
-```
-
-### 5. Deploy OpenClaw workspaces
-
-```bash
-bash scripts/setup-openclaw.sh
-# Deploys all 3 agent workspaces to ~/.openclaw/
-# Substitutes env vars into openclaw.json
-# Validates the config
-```
-
-### 6. Start the gateway
-
-```bash
-openclaw gateway --verbose
-```
-
-### 7. Open Convos and negotiate
-
-In the ClawFin Deal Room group, type:
-```
-Find me the best deal on AirPods Max, budget $450
-```
-
-Then interject mid-negotiation:
-```
-Only with warranty
+   CONVOS GROUP CHAT (XMTP)
+   ========================
+   You + 5 ClawFin Agents (@xmtp/agent-sdk)
+              |
+              | XMTP protocol
+              |
+   ========================
+   Each agent: Agent.create(signer, opts)
+               agent.on("text", ctx => ...)
+               ctx.conversation.send(...)
+   ========================
+              |
+       OpenRouter LLM
+       Composio Actions
+       Credit Card Engine
+       Negotiation State
 ```
 
 ---
@@ -128,58 +96,38 @@ Only with warranty
 
 ```
 clawfin/
-├── openclaw.json                    # Gateway config — 3 agents, OpenRouter, XMTP bindings
-├── workspaces/
-│   ├── clawbuyer/                   # ClawBot (buyer)
-│   │   ├── SOUL.md                  # Personality + negotiation strategy
-│   │   ├── AGENTS.md                # Operational rules + triggers
-│   │   ├── USER.md                  # User's credit cards + preferences
-│   │   └── skills/
-│   │       ├── deal-negotiation/    # Full 4-round negotiation orchestration
-│   │       ├── credit-card-calc/    # Cashback engine (3 cards + cards.json)
-│   │       └── composio-actions/    # Gmail + Sheets post-deal
-│   ├── dealdash/                    # DealDasher (aggressive discounter)
-│   │   ├── SOUL.md
-│   │   ├── AGENTS.md
-│   │   └── skills/seller-strategy/ # Pricing by round + urgency tactics
-│   └── bundleking/                  # BundleKing (value bundler)
-│       ├── SOUL.md
-│       ├── AGENTS.md
-│       └── skills/seller-strategy/ # Bundle progression by round
-├── scripts/
-│   ├── setup-openclaw.sh            # Deploy workspaces → ~/.openclaw/
-│   ├── gen-keys.ts                  # Generate agent wallet keys
-│   ├── create-group.ts              # One-time Convos group setup
-│   └── test-openrouter.ts           # OpenRouter smoke test
-├── agents/                          # v1 TypeScript agents (reference / fallback)
-├── lib/                             # v1 TypeScript libs (credit-card, composio, etc.)
-├── config/                          # Agent config constants
-├── .env.example
-├── package.json
-└── tsconfig.json
+├── agents/
+│   ├── buyer-agent.ts      # 🤖 ClawBot — orchestrates negotiation
+│   ├── seller-base.ts      # Shared seller agent base class
+│   └── start-sellers.ts    # Launches all 4 sellers concurrently
+├── lib/
+│   ├── openrouter.ts       # LLM client (OpenAI-compatible)
+│   ├── credit-card.ts      # Credit card rewards engine
+│   ├── deal-explainer.ts   # Offer ranking + deal summary formatter
+│   ├── negotiation-state.ts# In-memory session state per group ID
+│   ├── composio.ts         # Post-deal Gmail + Sheets actions
+│   └── prompts/
+│       ├── buyer-prompt.ts # ClawBot system prompt builder
+│       └── seller-prompts.ts # Seller prompts (4 strategies + styles)
+├── config/
+│   └── agents.ts           # Agent identities, LLM models, negotiation params
+└── scripts/
+    ├── gen-keys.ts         # Generate wallet + DB encryption keys
+    ├── create-group.ts     # Create XMTP group, print CONVOS_GROUP_ID
+    └── test-openrouter.ts  # Quick LLM sanity check
 ```
 
 ---
 
-## Judging Criteria Alignment
+## Demo Script
 
-| Criterion | How ClawFin Delivers |
-|-----------|----------------------|
-| **Working Prototype** | 3 live OpenClaw agents, full negotiation loop, Composio post-deal |
-| **OpenClaw as execution layer** | `openclaw gateway` IS the runtime — no custom agent scaffolding |
-| **Agents in group chats** | All 3 agents bound to the same Convos group via `openclaw.json` bindings |
-| **Multiple agents coordinating** | ClawBot orchestrates sellers; sellers compete blind (workspace isolation) |
-| **Clear agent boundaries** | Each agent has its own workspace, SOUL.md, and skills — no shared state |
-| **Human + Agent Collab** | Humans add constraints mid-negotiation; ClawBot adapts in real time |
+1. Show `agents/` folder — "5 AI agents, each `Agent.create()` with its own wallet"
+2. Open Convos — "This is our Deal Room. ClawBot, DealDasher, BundleKing, PremiumHub, and FlashDeals are all in here."
+3. Type: `Find me the best deal on AirPods Max, budget $450`
+4. Watch agents negotiate with distinct personalities
+5. Interject: `Must include warranty`
+6. ClawBot adapts → posts DEAL SUMMARY with credit card recommendation
+7. Show Gmail — Composio sent the deal summary
+8. Show Google Sheets — deal logged automatically
 
----
-
-## Credits
-
-- **XMTP / Convos** — group messaging layer
-- **OpenClaw** — multi-agent execution runtime
-- **OpenRouter** — unified LLM API
-- **Composio** — post-deal Gmail/Sheets integrations
-- Core negotiation logic ported from [DealForge](https://github.com/ritzzi23/negotiation_ai)
-
-MIT License
+**Key line for judges:** "5 isolated XMTP agents, each with their own identity, soul, and strategy — all coordinating in a single Convos group chat over @xmtp/agent-sdk."

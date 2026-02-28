@@ -10,3 +10,4 @@ dist
 
 # OpenClaw deployed config (generated from openclaw.json by setup script)
 # The source openclaw.json is committed; the deployed copy at ~/.openclaw/ is not
+.data/

@@ -1,9 +1,9 @@
 // agents/start-sellers.ts
-// Starts all 4 seller agents concurrently
-// Each gets its own XMTP wallet identity and runs independently
+// Starts all 4 seller agents concurrently using @xmtp/agent-sdk
+// Each agent has its own XMTP identity (wallet + db encryption key)
 
 import dotenv from "dotenv";
-import { type XmtpEnv } from "@xmtp/node-sdk";
+import type { XmtpEnv } from "@xmtp/agent-sdk";
 import { startSellerAgent } from "./seller-base";
 
 dotenv.config();
@@ -23,7 +23,7 @@ async function main() {
 
     if (missing.length > 0) {
         console.error(`[Sellers] Missing env vars: ${missing.join(", ")}`);
-        console.error("Run: npx ts-node scripts/gen-keys.ts");
+        console.error("Run: npm run gen:keys");
         process.exit(1);
     }
 
@@ -31,7 +31,8 @@ async function main() {
         // --- Seller 1: DealDasher (Aggressive Discounter) ---
         startSellerAgent({
             displayName: "⚡ DealDasher",
-            walletKey: process.env.SELLER_DISCOUNTER_WALLET_KEY as `0x${string}`,
+            walletKey: process.env.SELLER_DISCOUNTER_WALLET_KEY! as `0x${string}`,
+            dbEncryptionKey: process.env.SELLER_DISCOUNTER_DB_ENCRYPTION_KEY,
             xmtpEnv: XMTP_ENV,
             sellerConfig: {
                 name: "DealDasher",
@@ -46,7 +47,8 @@ async function main() {
         // --- Seller 2: BundleKing (Value Bundler) ---
         startSellerAgent({
             displayName: "🎁 BundleKing",
-            walletKey: process.env.SELLER_BUNDLER_WALLET_KEY as `0x${string}`,
+            walletKey: process.env.SELLER_BUNDLER_WALLET_KEY! as `0x${string}`,
+            dbEncryptionKey: process.env.SELLER_BUNDLER_DB_ENCRYPTION_KEY,
             xmtpEnv: XMTP_ENV,
             sellerConfig: {
                 name: "BundleKing",
@@ -62,7 +64,8 @@ async function main() {
         // --- Seller 3: PremiumHub (Firm Pricing) ---
         startSellerAgent({
             displayName: "💎 PremiumHub",
-            walletKey: process.env.SELLER_FIRM_WALLET_KEY as `0x${string}`,
+            walletKey: process.env.SELLER_FIRM_WALLET_KEY! as `0x${string}`,
+            dbEncryptionKey: process.env.SELLER_FIRM_DB_ENCRYPTION_KEY,
             xmtpEnv: XMTP_ENV,
             sellerConfig: {
                 name: "PremiumHub",
@@ -77,7 +80,8 @@ async function main() {
         // --- Seller 4: FlashDeals (Limited Inventory / Urgency) ---
         startSellerAgent({
             displayName: "🔥 FlashDeals",
-            walletKey: process.env.SELLER_URGENCY_WALLET_KEY as `0x${string}`,
+            walletKey: process.env.SELLER_URGENCY_WALLET_KEY! as `0x${string}`,
+            dbEncryptionKey: process.env.SELLER_URGENCY_DB_ENCRYPTION_KEY,
             xmtpEnv: XMTP_ENV,
             sellerConfig: {
                 name: "FlashDeals",
@@ -85,14 +89,13 @@ async function main() {
                 style: "casual",
                 itemName: "product",
                 msrp: 300,
-                floorPrice: 234,   // 78% of $300
+                floorPrice: 234,
             },
         }),
     ];
 
-    console.log("✅ All 4 seller agents starting...");
+    console.log("✅ All 4 seller agents starting...\n");
 
-    // Run all sellers concurrently (they each maintain their own XMTP stream)
     await Promise.all(sellerPromises).catch((err) => {
         console.error("[Sellers] Fatal error:", err);
         process.exit(1);

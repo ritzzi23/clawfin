@@ -1,16 +1,16 @@
 {
     "compilerOptions": {
         "target": "ES2022",
-        "module": "commonjs",
+        "module": "CommonJS",
+        "moduleResolution": "Node",
         "lib": [
-            "ES2022",
-            "dom",
-            "dom.iterable"
+            "ES2022"
         ],
         "outDir": "./dist",
         "rootDir": "./",
         "strict": false,
         "esModuleInterop": true,
+        "allowSyntheticDefaultImports": true,
         "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true,
         "resolveJsonModule": true,

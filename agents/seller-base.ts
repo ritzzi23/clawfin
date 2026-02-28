@@ -1,79 +1,56 @@
 // agents/seller-base.ts
-// Shared base class for all seller agents
-// Each seller runs its own XMTP identity and responds in the group chat
+// Shared base for all seller agents using @xmtp/agent-sdk
+// Each seller is an Agent instance with its own identity and wallet
 
-import { Client, type XmtpEnv } from "@xmtp/node-sdk";
-import { createWalletClient, http } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
-import { mainnet } from "viem/chains";
+import { Agent, createSigner, createUser, filter as f } from "@xmtp/agent-sdk";
+import type { XmtpEnv } from "@xmtp/agent-sdk";
 
 import { chat } from "../lib/openrouter";
 import { buildSellerPrompt, SellerConfig, extractPriceFromMessage } from "../lib/prompts/seller-prompts";
 import { getSession, addToHistory, recordOffer } from "../lib/negotiation-state";
 import { LLM_MODELS, NEGOTIATION } from "../config/agents";
-import { SellerStrategy } from "../config/agents";
 
 export interface SellerAgentConfig {
     displayName: string;
     walletKey: `0x${string}`;
+    dbEncryptionKey?: string;
     sellerConfig: Omit<SellerConfig, "currentOffer">;
     xmtpEnv: XmtpEnv;
 }
 
 export async function startSellerAgent(agentConfig: SellerAgentConfig): Promise<void> {
-    const { displayName, walletKey, sellerConfig, xmtpEnv } = agentConfig;
+    const { displayName, walletKey, dbEncryptionKey, sellerConfig, xmtpEnv } = agentConfig;
+    const safeId = sellerConfig.name.toLowerCase().replace(/\s+/g, "-");
 
-    const account = privateKeyToAccount(walletKey);
-    const walletClient = createWalletClient({
-        account,
-        chain: mainnet,
-        transport: http(),
+    const user = createUser(walletKey);
+    const signer = createSigner(user);
+
+    const agent = await Agent.create(signer, {
+        env: xmtpEnv,
+        dbPath: `.data/${safeId}.db`,
+        dbEncryptionKey: dbEncryptionKey
+            ? Buffer.from(dbEncryptionKey.replace(/^0x/, ""), "hex")
+            : undefined,
     });
 
-    const signer = {
-        getAddress: () => account.address as string,
-        signMessage: async (message: string): Promise<Uint8Array> => {
-            const sig = await walletClient.signMessage({ account, message });
-            const hex = sig.slice(2);
-            const bytes = new Uint8Array(hex.length / 2);
-            for (let i = 0; i < bytes.length; i++) {
-                bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-            }
-            return bytes;
-        },
-    };
+    console.log(`[${displayName}] ✅ Online | Address: ${agent.address}`);
 
-    // Derive a stable 32-byte encryption key from wallet private key
-    const encryptionKey = new Uint8Array(Buffer.from(walletKey.slice(2), "hex"));
-    const client = await Client.create(signer, encryptionKey, { env: xmtpEnv });
-
-    console.log(`[${displayName}] ✅ Online | Inbox: ${client.inboxId}`);
-
-    await client.conversations.sync();
-
-    const stream = client.conversations.streamAllMessages();
-
-    for await (const message of await stream) {
+    agent.on("text", async (ctx) => {
         // Skip own messages
-        if (message.senderInboxId === client.inboxId) continue;
+        if (f.fromSelf(ctx.message, ctx.client)) return;
 
-        const content =
-            typeof message.content === "string" ? message.content : String(message.content ?? "");
+        const content = ctx.message.content;
+        if (!content?.trim()) return;
 
-        if (!content.trim()) continue;
-
-        const groupId = message.conversationId;
+        const groupId = ctx.conversation.id;
         const session = getSession(groupId);
 
         // Only respond when there's an active negotiation in this group
-        if (!session || session.status === "completed") continue;
+        if (!session || session.status === "completed") return;
 
         const lower = content.toLowerCase();
 
-        // Respond if:
-        // 1. The buyer agent opened negotiations ("reaching out to sellers")
-        // 2. Buyer mentioned this seller by @name
-        // 3. Buyer posted a counter-offer referencing competitors
+        // Visibility filter: respond only to buyer (ClawBot) or negotiation triggers
         const isMentioned =
             lower.includes(`@${sellerConfig.name.toLowerCase()}`) ||
             lower.includes("reaching out to") ||
@@ -81,23 +58,38 @@ export async function startSellerAgent(agentConfig: SellerAgentConfig): Promise<
             lower.includes("counter") ||
             lower.includes("can you do better") ||
             lower.includes("that's above my budget") ||
-            lower.includes("i have other offers");
+            lower.includes("i have other offers") ||
+            lower.includes("best offer");
 
-        if (!isMentioned) continue;
+        if (!isMentioned) return;
 
-        // Add delay so sellers don't all respond simultaneously
+        // Add strategy-based delay so sellers feel like separate entities
         const delay = getStrategyDelay(sellerConfig.strategy);
         await new Promise((r) => setTimeout(r, delay));
 
-        // Calculate current offer (starts at opening, adjusts per round)
         const round = session.round || 1;
         const currentOffer = calculateCurrentOffer(sellerConfig, session.budget, round);
 
-        // Build prompt with history
-        const history = session.history.map((h) => ({
-            senderName: h.senderName,
-            content: h.content,
-        }));
+        // Apply visibility filter — seller only sees buyer messages + its own
+        const history = session.history
+            .filter(
+                (h) =>
+                    h.senderName === "ClawBot" ||
+                    h.senderName === sellerConfig.name ||
+                    (h.senderName !== "DealDasher" &&
+                        h.senderName !== "BundleKing" &&
+                        h.senderName !== "PremiumHub" &&
+                        h.senderName !== "FlashDeals")
+            )
+            .map((h) => ({
+                senderName: h.senderName,
+                content: h.content,
+                isHuman: h.senderName !== "ClawBot" &&
+                    h.senderName !== "DealDasher" &&
+                    h.senderName !== "BundleKing" &&
+                    h.senderName !== "PremiumHub" &&
+                    h.senderName !== "FlashDeals",
+            }));
 
         const promptConfig: SellerConfig = { ...sellerConfig, currentOffer };
         const messages = buildSellerPrompt(promptConfig, "ClawBot", history, session.budget);
@@ -105,29 +97,28 @@ export async function startSellerAgent(agentConfig: SellerAgentConfig): Promise<
         const response = await chat(messages, LLM_MODELS.seller, 0.8, 256);
 
         if (response) {
-            const conversation = await client.conversations.getConversationById(groupId);
-            if (conversation) {
-                await conversation.send(response);
+            await ctx.conversation.sendText(response);
 
-                // Record offer in session state
-                const extractedPrice = extractPriceFromMessage(response);
-                if (extractedPrice) {
-                    recordOffer(groupId, sellerConfig.name, extractedPrice, {
-                        hasWarranty: sellerConfig.strategy === "BUNDLER",
-                        bundleItems: sellerConfig.strategy === "BUNDLER" ? sellerConfig.bundleItems : [],
-                    });
-                }
-
-                addToHistory(groupId, sellerConfig.name, response);
-                console.log(`[${displayName}] Responded: "${response.slice(0, 80)}..."`);
+            const extractedPrice = extractPriceFromMessage(response);
+            if (extractedPrice) {
+                recordOffer(groupId, sellerConfig.name, extractedPrice, {
+                    hasWarranty: sellerConfig.strategy === "BUNDLER",
+                    bundleItems: sellerConfig.strategy === "BUNDLER" ? sellerConfig.bundleItems : [],
+                });
             }
+
+            addToHistory(groupId, sellerConfig.name, response);
+            console.log(`[${displayName}] 💬 "${response.slice(0, 80)}..."`);
         }
-    }
+    });
+
+    agent.on("unhandledError", (error) => {
+        console.error(`[${displayName}] Error:`, error);
+    });
+
+    await agent.start();
 }
 
-/**
- * Calculate the seller's current offering price based on round and strategy
- */
 function calculateCurrentOffer(
     config: Omit<SellerConfig, "currentOffer">,
     buyerBudget: number,
@@ -138,37 +129,37 @@ function calculateCurrentOffer(
 
     switch (config.strategy) {
         case "DISCOUNTER": {
-            // Drops aggressively each round
-            const startPrice = msrp * 0.9; // 10% off to start
+            const startPrice = msrp * 0.9;
             const dropPerRound = (startPrice - floor) / (NEGOTIATION.maxRounds + 1);
             return Math.max(floor, startPrice - dropPerRound * round);
         }
         case "BUNDLER": {
-            // Holds price, drops slowly
             const startPrice = msrp * 0.92;
             const dropPerRound = (startPrice - floor) / (NEGOTIATION.maxRounds * 2);
             return Math.max(floor, startPrice - dropPerRound * round);
         }
         case "FIRM": {
-            // Barely moves
             const startPrice = msrp * 0.98;
-            const maxDrop = msrp * 0.05; // max 5% total
+            const maxDrop = msrp * 0.05;
             const dropPerRound = maxDrop / NEGOTIATION.maxRounds;
             return Math.max(floor, startPrice - dropPerRound * Math.min(round, 2));
+        }
+        case "URGENCY": {
+            const startPrice = msrp * 0.88;
+            const dropPerRound = (startPrice - floor) / (NEGOTIATION.maxRounds + 1);
+            return Math.max(floor, startPrice - dropPerRound * round);
         }
         default:
             return msrp * 0.9;
     }
 }
 
-/**
- * Add strategy-specific delays so sellers feel like separate entities
- */
-function getStrategyDelay(strategy: SellerStrategy): number {
+function getStrategyDelay(strategy: string): number {
     switch (strategy) {
-        case "DISCOUNTER": return 2000;  // responds fast (eager)
-        case "BUNDLER": return 3500;     // takes a moment (considers bundle)
-        case "FIRM": return 5000;        // takes its time (premium, unhurried)
+        case "DISCOUNTER": return 2000;
+        case "BUNDLER": return 3500;
+        case "FIRM": return 5000;
+        case "URGENCY": return 1500;
         default: return 3000;
     }
 }
