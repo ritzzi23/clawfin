@@ -1,0 +1,29 @@
+{
+  "name": "clawfin",
+  "version": "1.0.0",
+  "description": "Group chat negotiation agents — ClawHack NYC 2026",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "gen:keys": "ts-node scripts/gen-keys.ts",
+    "start:buyer": "ts-node agents/buyer-agent.ts",
+    "start:sellers": "ts-node agents/start-sellers.ts",
+    "start:all": "concurrently \"npm run start:buyer\" \"npm run start:sellers\"",
+    "setup:group": "ts-node scripts/create-group.ts",
+    "test:openrouter": "ts-node scripts/test-openrouter.ts"
+  },
+  "dependencies": {
+    "@xmtp/node-sdk": "^0.0.34",
+    "@openrouter/sdk": "^0.0.1",
+    "viem": "^2.21.54",
+    "dotenv": "^16.4.7",
+    "axios": "^1.7.9",
+    "openai": "^4.77.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "ts-node": "^10.9.2",
+    "@types/node": "^22.13.4",
+    "concurrently": "^9.1.2"
+  }
+}

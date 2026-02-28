@@ -1,0 +1,74 @@
+[
+  {
+    "name": "discover_it",
+    "displayName": "Discover It",
+    "rewards": [
+      {
+        "category": "Electronics",
+        "keywords": [
+          "headphones", "earbuds", "speaker", "speakers",
+          "laptop", "tablet", "phone", "camera",
+          "airpods", "sony", "apple", "samsung",
+          "monitor", "tv", "television",
+          "iphone", "ipad", "macbook",
+          "dell", "hp", "lenovo", "lg",
+          "keyboard", "mouse", "webcam",
+          "gaming", "console", "playstation", "xbox",
+          "drone", "dji"
+        ],
+        "cashbackPercent": 5,
+        "note": "5% rotating electronics category (Q4 typical)"
+      },
+      {
+        "category": "Everything Else",
+        "keywords": [],
+        "cashbackPercent": 1,
+        "note": "1% on all other purchases"
+      }
+    ]
+  },
+  {
+    "name": "chase_freedom_flex",
+    "displayName": "Chase Freedom Flex",
+    "rewards": [
+      {
+        "category": "Select Retailers",
+        "keywords": [
+          "amazon", "target", "walmart",
+          "bestbuy", "best buy",
+          "ebay", "costco", "sam's club",
+          "home depot", "lowes"
+        ],
+        "cashbackPercent": 5,
+        "note": "5% at select online & in-store retailers (quarterly rotation)"
+      },
+      {
+        "category": "Everything Else",
+        "keywords": [],
+        "cashbackPercent": 1.5,
+        "note": "1.5% on all other purchases"
+      }
+    ]
+  },
+  {
+    "name": "amex_blue",
+    "displayName": "Amex Blue Cash",
+    "rewards": [
+      {
+        "category": "US Online Retail",
+        "keywords": [
+          "online", "shop", "store", "web", ".com",
+          "purchase", "order", "digital"
+        ],
+        "cashbackPercent": 3,
+        "note": "3% at US online retailers"
+      },
+      {
+        "category": "Everything Else",
+        "keywords": [],
+        "cashbackPercent": 1,
+        "note": "1% on all other purchases"
+      }
+    ]
+  }
+]

@@ -1,0 +1,12 @@
+node_modules
+dist
+.env
+*.db
+*.db3
+*.db3-shm
+*.db3-wal
+*.sqlcipher_salt
+.xmtp
+
+# OpenClaw deployed config (generated from openclaw.json by setup script)
+# The source openclaw.json is committed; the deployed copy at ~/.openclaw/ is not

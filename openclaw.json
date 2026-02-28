@@ -1,0 +1,93 @@
+{
+  "identity": {
+    "name": "ClawFin",
+    "emoji": "🏷️",
+    "version": "2.0.0",
+    "description": "Group deal negotiation — 3 OpenClaw agents in a Convos chat"
+  },
+
+  "agents": {
+    "list": [
+      {
+        "id": "clawbuyer",
+        "name": "ClawBot",
+        "workspace": "~/.openclaw/workspace-clawbuyer",
+        "model": "openrouter/anthropic/claude-3.5-haiku"
+      },
+      {
+        "id": "dealdash",
+        "name": "DealDasher",
+        "workspace": "~/.openclaw/workspace-dealdash",
+        "model": "openrouter/meta-llama/llama-3.1-8b-instruct:free"
+      },
+      {
+        "id": "bundleking",
+        "name": "BundleKing",
+        "workspace": "~/.openclaw/workspace-bundleking",
+        "model": "openrouter/meta-llama/llama-3.1-8b-instruct:free"
+      }
+    ]
+  },
+
+  "bindings": [
+    {
+      "agentId": "clawbuyer",
+      "match": {
+        "channel": "xmtp",
+        "peer": { "kind": "group", "id": "${CONVOS_GROUP_ID}" }
+      }
+    },
+    {
+      "agentId": "dealdash",
+      "match": {
+        "channel": "xmtp",
+        "peer": { "kind": "group", "id": "${CONVOS_GROUP_ID}" }
+      }
+    },
+    {
+      "agentId": "bundleking",
+      "match": {
+        "channel": "xmtp",
+        "peer": { "kind": "group", "id": "${CONVOS_GROUP_ID}" }
+      }
+    }
+  ],
+
+  "models": {
+    "providers": {
+      "openrouter": {
+        "baseUrl": "https://openrouter.ai/api/v1",
+        "apiKey": "${OPENROUTER_API_KEY}",
+        "api": "openai-responses"
+      }
+    }
+  },
+
+  "xmtp": {
+    "env": "${XMTP_ENV}",
+    "walletKeys": {
+      "clawbuyer": "${BUYER_WALLET_KEY}",
+      "dealdash": "${SELLER_DISCOUNTER_WALLET_KEY}",
+      "bundleking": "${SELLER_BUNDLER_WALLET_KEY}"
+    }
+  },
+
+  "groupChat": {
+    "mentionPatterns": ["@clawbot", "@dealdash", "@bundleking", "@clawfin"],
+    "maxRounds": 4,
+    "roundDelayMs": 3000
+  },
+
+  "integrations": {
+    "composio": {
+      "apiKey": "${COMPOSIO_API_KEY}"
+    },
+    "vapi": {
+      "apiKey": "${VAPI_API_KEY}"
+    },
+    "elevenlabs": {
+      "apiKey": "${ELEVENLABS_API_KEY}",
+      "voiceId": "${ELEVENLABS_VOICE_ID}"
+    }
+  }
+}
