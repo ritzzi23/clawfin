@@ -1,20 +1,20 @@
 // scripts/composio-connect.ts
 // One-time OAuth setup: connects Gmail, Google Sheets, and Slack to Composio
-// Run once before the hackathon demo: npx ts-node scripts/composio-connect.ts
+// Run once before the hackathon demo: npm run composio:connect
 //
-// What this does:
-//   1. Generates OAuth connection URLs for Gmail, Sheets, and Slack
-//   2. Opens them in your browser (or prints them if browser unavailable)
-//   3. After you authenticate, Composio stores the tokens
-//   4. ClawFin can then fire Gmail/Sheets/Slack actions without any auth prompts
+// Flow:
+//   1. Creates a Composio-managed auth config for each app
+//   2. Generates a connection link (OAuth URL)
+//   3. Opens it in your browser — authenticate to authorize
+//   4. Composio stores the tokens; ClawFin can fire actions without further auth
 
 import { Composio } from "@composio/core";
+import { execSync } from "child_process";
 import dotenv from "dotenv";
 
 dotenv.config();
 
 const ENTITY_ID = process.env.COMPOSIO_ENTITY_ID || "default";
-
 const APPS_TO_CONNECT = ["gmail", "googlesheets", "slack"] as const;
 
 async function main() {
@@ -27,67 +27,60 @@ async function main() {
     const composio = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
 
     console.log("\n🔗 ClawFin — Composio OAuth Setup");
-    console.log("   Entity ID:", ENTITY_ID);
-    console.log("   Apps:", APPS_TO_CONNECT.join(", "));
-    console.log("");
+    console.log(`   Entity: ${ENTITY_ID}`);
+    console.log(`   Apps:   ${APPS_TO_CONNECT.join(", ")}\n`);
+
+    // Check which apps are already connected
+    const existing = await composio.connectedAccounts.list({ userIds: [ENTITY_ID] } as any);
+    const activeApps = new Set(
+        (existing.items || [])
+            .filter((a: any) => a.status === "ACTIVE")
+            .map((a: any) => a.appName?.toLowerCase())
+    );
 
     for (const app of APPS_TO_CONNECT) {
-        console.log(`\n── Connecting ${app.toUpperCase()} ──`);
+        console.log(`── ${app.toUpperCase()} ──`);
+
+        if (activeApps.has(app)) {
+            console.log(`✅ Already connected\n`);
+            continue;
+        }
 
         try {
-            // Check if already connected
-            const accounts = await composio.connectedAccounts.list({
-                userId: ENTITY_ID,
-            } as any);
+            // Create Composio-managed auth config, then generate link
+            const authConfig = await composio.authConfigs.create(app, {
+                type: "use_composio_managed_auth",
+            });
 
-            const existing = (accounts as any)?.items?.find(
-                (a: any) => a.appName?.toLowerCase() === app
+            const connectionReq = await composio.connectedAccounts.link(
+                ENTITY_ID,
+                authConfig.id
             );
 
-            if (existing && existing.status === "ACTIVE") {
-                console.log(`✅ ${app} already connected (ID: ${existing.id})`);
-                continue;
-            }
+            const url = (connectionReq as any).redirectUrl;
 
-            // Generate OAuth URL
-            const connectionRequest = await composio.connectedAccounts.create({
-                appName: app,
-                userId: ENTITY_ID,
-                config: {},
-            } as any);
-
-            const authUrl = (connectionRequest as any).redirectUrl || (connectionRequest as any).url;
-
-            if (authUrl) {
-                console.log(`🌐 Open this URL to connect ${app}:`);
-                console.log(`   ${authUrl}`);
-                console.log("");
-
-                // Try to open in browser on macOS/Linux
+            if (url) {
+                console.log(`🌐 OAuth URL:\n   ${url}\n`);
                 try {
-                    const { execSync } = require("child_process");
-                    const openCmd = process.platform === "darwin" ? "open" : "xdg-open";
-                    execSync(`${openCmd} "${authUrl}"`, { stdio: "ignore" });
-                    console.log("   (Opened in browser)");
+                    execSync(`open "${url}"`, { stdio: "ignore" });
+                    console.log("   (Opened in browser — authorize then come back)\n");
                 } catch {
-                    console.log("   (Copy and paste the URL above into your browser)");
+                    console.log("   (Paste the URL above into your browser)\n");
                 }
             } else {
-                console.log(`⚠️  Could not get OAuth URL for ${app}. Check the Composio dashboard.`);
+                console.log(`⚠️  No URL returned for ${app}\n`);
             }
         } catch (err: any) {
-            console.error(`❌ Failed to connect ${app}:`, err?.message || err);
+            console.error(`❌ ${app}: ${err?.message}\n`);
         }
     }
 
-    console.log("\n\n──────────────────────────────────────────────");
-    console.log("After connecting all apps in your browser:");
-    console.log("  Re-run this script to verify all connections are ACTIVE.");
-    console.log("");
-    console.log("Then set these in your .env:");
-    console.log("  USER_EMAIL=your@email.com");
-    console.log("  DEAL_TRACKER_SHEET_ID=your-google-sheet-id");
-    console.log("  SLACK_CHANNEL_ID=your-slack-channel-id (e.g. #deals or C0123456)");
+    console.log("──────────────────────────────────────────────");
+    console.log("After authorizing in your browser, add to .env:");
+    console.log("  USER_EMAIL=your@gmail.com");
+    console.log("  DEAL_TRACKER_SHEET_ID=<id from Sheet URL>");
+    console.log("  SLACK_CHANNEL_ID=<#channel or C0123ABCD>");
+    console.log("\nRe-run this script to verify all show as connected.");
     console.log("──────────────────────────────────────────────\n");
 }
 
