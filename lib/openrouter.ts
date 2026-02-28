@@ -11,7 +11,7 @@ const client = new OpenAI({
     apiKey: process.env.OPENROUTER_API_KEY || "",
     defaultHeaders: {
         "HTTP-Referer": "https://github.com/ritzzi23/clawfin",
-        "X-Title": "ClawFin — Group Chat Negotiation",
+        "X-Title": "ClawFin - Group Chat Negotiation",
     },
 });
 
