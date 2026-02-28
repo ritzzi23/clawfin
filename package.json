@@ -10,20 +10,22 @@
     "start:sellers": "ts-node agents/start-sellers.ts",
     "start:all": "concurrently \"npm run start:buyer\" \"npm run start:sellers\"",
     "setup:group": "ts-node scripts/create-group.ts",
-    "test:openrouter": "ts-node scripts/test-openrouter.ts"
+    "test:openrouter": "ts-node scripts/test-openrouter.ts",
+    "composio:connect": "ts-node scripts/composio-connect.ts"
   },
   "dependencies": {
-    "@xmtp/node-sdk": "^0.0.34",
+    "@composio/core": "^0.6.3",
     "@openrouter/sdk": "^0.0.1",
-    "viem": "^2.21.54",
-    "dotenv": "^16.4.7",
+    "@xmtp/node-sdk": "^0.0.34",
     "axios": "^1.7.9",
-    "openai": "^4.77.0"
+    "dotenv": "^16.4.7",
+    "openai": "^4.77.0",
+    "viem": "^2.21.54"
   },
   "devDependencies": {
-    "typescript": "^5.7.3",
-    "ts-node": "^10.9.2",
     "@types/node": "^22.13.4",
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
   }
 }

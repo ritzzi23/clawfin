@@ -2,114 +2,139 @@
 
 ## When to Use This Skill
 
-Use this skill **immediately after** the DEAL SUMMARY is posted in the group chat. It fires two post-deal actions in parallel:
+Use this skill **immediately after** the DEAL SUMMARY is posted in the group chat.
 
-1. **Gmail** — sends the deal summary to the user's email
+Fires three post-deal actions in parallel via the Composio SDK (`@composio/core`):
+1. **Gmail** — sends the full deal summary to the user's email
 2. **Google Sheets** — appends a row to the user's deal tracker spreadsheet
+3. **Slack** — posts a deal notification to the user's Slack channel
 
-Both require environment variables: `COMPOSIO_API_KEY`, `USER_EMAIL`, `DEAL_TRACKER_SHEET_ID`.
+Requires `COMPOSIO_API_KEY` in environment. If not set, skip all actions silently.
 
-If `COMPOSIO_API_KEY` is not set, skip both actions silently (no error message to the group).
+Before running for the first time: `npm run composio:connect` (one-time OAuth setup for Gmail, Sheets, Slack).
 
 ---
 
-## Action 1: Gmail — Send Deal Summary Email
+## SDK Usage
 
-**API call:**
+The Composio SDK executes all actions via:
 ```
-POST https://backend.composio.dev/api/v1/actions/execute/CLAWFIN
-Headers:
-  x-api-key: {COMPOSIO_API_KEY}
-  Content-Type: application/json
+composio.tools.execute(actionSlug, { arguments: {...}, userId: ENTITY_ID })
+```
 
-Body:
+`ENTITY_ID` defaults to `"default"` (controlled by `COMPOSIO_ENTITY_ID` env var).
+
+---
+
+## Action 1: Gmail
+
+**Action slug:** `GMAIL_SEND_EMAIL`
+
+**Arguments:**
+```json
 {
-  "appName": "gmail",
-  "actionName": "GMAIL_SEND_EMAIL",
-  "input": {
-    "to": "{USER_EMAIL}",
-    "subject": "🏆 ClawFin Deal Found: {productName} @ ${effectivePrice}",
-    "body": "Your ClawFin agent found you a deal!\n\n{summaryText}\n\nNegotiated by ClawFin — powered by XMTP + OpenClaw"
-  }
+  "recipient_email": "{USER_EMAIL}",
+  "subject": "🏆 ClawFin Deal Found: {productName} @ ${effectivePrice}",
+  "body": "Your ClawFin agent found you a deal!\n\n{summaryText}\n\n---\nNegotiated by ClawFin — powered by XMTP + OpenClaw"
 }
 ```
 
-**On success:** Post to group: *"📧 Deal summary sent to your email"*
+**On success:** Announce to group: `"📧 Deal summary sent to your email"`
 **On failure:** Log error silently. Do not post to group.
+**If USER_EMAIL not set:** Skip silently.
 
 ---
 
-## Action 2: Google Sheets — Log Deal Row
+## Action 2: Google Sheets
 
-**API call:**
-```
-POST https://backend.composio.dev/api/v1/actions/execute/CLAWFIN
-Headers:
-  x-api-key: {COMPOSIO_API_KEY}
-  Content-Type: application/json
+**Action slug:** `GOOGLESHEETS_SHEET_APPEND_ROW`
 
-Body:
+**Arguments:**
+```json
 {
-  "appName": "googlesheets",
-  "actionName": "GOOGLESHEETS_SHEET_APPEND_ROW",
-  "input": {
-    "spreadsheetId": "{DEAL_TRACKER_SHEET_ID}",
-    "values": [
-      "{timestamp_iso}",
-      "{productName}",
-      "{winnerSeller}",
-      "{price}",
-      "{cardUsed}",
-      "{cashbackAmount}",
-      "{effectivePrice}",
-      "{savings}"
-    ]
-  }
+  "spreadsheet_id": "{DEAL_TRACKER_SHEET_ID}",
+  "sheet_id": "Sheet1",
+  "values": [
+    "{timestamp_iso}",
+    "{productName}",
+    "{winnerSeller}",
+    "{price}",
+    "{cardUsed}",
+    "{cashbackAmount}",
+    "{effectivePrice}",
+    "{savings}"
+  ]
 }
 ```
 
-**Spreadsheet column order:**
-| A | B | C | D | E | F | G | H |
-|---|---|---|---|---|---|---|---|
-| Timestamp | Product | Seller | Price | Card Used | Cashback | Effective Price | Savings |
+**Spreadsheet columns:** Timestamp | Product | Seller | Price | Card | Cashback | Effective Price | Saved
 
-**On success:** Post to group: *"📊 Logged to your deal tracker spreadsheet"*
-**On failure:** Log error silently.
+**On success:** Announce: `"📊 Logged to your deal tracker"`
+**If DEAL_TRACKER_SHEET_ID not set:** Skip silently.
 
 ---
 
-## Execution
+## Action 3: Slack
 
-Run both actions in parallel (don't wait for one before starting the other).
+**Action slug:** `SLACK_SEND_MESSAGE`
 
-After both complete (or fail), post a single combined status to the group:
+**Arguments:**
+```json
+{
+  "channel": "{SLACK_CHANNEL_ID}",
+  "text": "🏷️ *ClawFin Deal Closed*\n*Product:* {productName}\n*Winner:* @{winnerSeller}\n*Price:* ${price} → ${effectivePrice} effective ({cardUsed})\n*Saved:* ${savings}"
+}
+```
 
-If both succeeded:
+**On success:** Announce: `"💬 Posted to Slack"`
+**If SLACK_CHANNEL_ID not set:** Skip silently.
+
+---
+
+## Combined Group Chat Response
+
+After all three actions complete, post a single message:
+
+If any succeeded:
 ```
 📬 Post-deal actions complete:
 📧 Deal summary sent to your email
-📊 Logged to your deal tracker spreadsheet
+📊 Logged to your deal tracker
+💬 Posted to Slack
 ```
 
-If neither is configured (no API key):
+If none configured:
 ```
-(Composio not configured — set COMPOSIO_API_KEY to enable email + sheet logging)
+(Composio not configured — set COMPOSIO_API_KEY to enable post-deal actions)
 ```
 
 ---
 
 ## Input Variables
 
-This skill expects to receive these values from the `deal-negotiation` skill:
+Received from the `deal-negotiation` skill:
 
 | Variable | Description |
 |----------|-------------|
-| `productName` | What was negotiated (e.g., "AirPods Max") |
+| `productName` | Negotiated product (e.g., "AirPods Max") |
 | `winnerSeller` | Winning seller name (e.g., "DealDasher") |
-| `price` | Nominal price agreed (e.g., 380.00) |
+| `price` | Agreed price (e.g., 380.00) |
 | `effectivePrice` | After credit card cashback (e.g., 361.00) |
 | `cardUsed` | Best card name (e.g., "Discover It") |
 | `cashbackAmount` | Dollar amount of cashback (e.g., 19.00) |
 | `savings` | Budget − effectivePrice (e.g., 89.00) |
-| `summaryText` | Full text of the DEAL SUMMARY block |
-| `timestamp_iso` | Current datetime in ISO 8601 format |
+| `summaryText` | Full DEAL SUMMARY text block |
+| `timestamp_iso` | Current datetime in ISO 8601 |
+
+---
+
+## Pre-Demo Checklist
+
+Before demoing, run once:
+```bash
+npm run composio:connect
+# Opens OAuth URLs for Gmail, Sheets, Slack
+# Authenticate in browser, then connections are saved in Composio
+```
+
+Verify connections at: platform.composio.dev → Connected Accounts

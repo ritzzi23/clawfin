@@ -1,44 +1,50 @@
 // lib/composio.ts
-// Post-deal integrations via Composio — Gmail + Google Sheets
-// Fires after the buyer agent posts the deal summary
+// Post-deal integrations via Composio SDK (@composio/core)
+// Fires after the buyer agent posts the DEAL SUMMARY
+// Actions: Gmail send + Google Sheets log + Slack notification
 
-// Uses Composio REST API directly via axios (no SDK dependency needed)
-import axios from "axios";
+import { Composio } from "@composio/core";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-const COMPOSIO_API_KEY = process.env.COMPOSIO_API_KEY || "";
-const BASE_URL = "https://backend.composio.dev/api/v1";
+// Entity ID scopes which connected account to use.
+// "default" works for single-user setups.
+const ENTITY_ID = process.env.COMPOSIO_ENTITY_ID || "default";
 
-interface ComposioActionPayload {
-    appName: string;
-    actionName: string;
-    input: Record<string, unknown>;
-    entityId?: string;
+let _client: Composio | null = null;
+
+function getClient(): Composio | null {
+    if (!process.env.COMPOSIO_API_KEY) return null;
+    if (!_client) {
+        _client = new Composio({ apiKey: process.env.COMPOSIO_API_KEY });
+    }
+    return _client;
 }
 
-async function executeAction(payload: ComposioActionPayload): Promise<any> {
-    if (!COMPOSIO_API_KEY) {
-        console.warn("[Composio] No API key set, skipping action:", payload.actionName);
+async function executeAction(
+    slug: string,
+    args: Record<string, unknown>
+): Promise<any> {
+    const client = getClient();
+    if (!client) {
+        console.warn(`[Composio] COMPOSIO_API_KEY not set — skipping ${slug}`);
         return null;
     }
 
     try {
-        const response = await axios.post(
-            `${BASE_URL}/actions/execute/CLAWFIN`,
-            payload,
-            {
-                headers: {
-                    "x-api-key": COMPOSIO_API_KEY,
-                    "Content-Type": "application/json",
-                },
-                timeout: 15000,
-            }
-        );
-        return response.data;
+        const result = await client.tools.execute(slug, {
+            arguments: args,
+            userId: ENTITY_ID,
+        });
+        return result;
     } catch (err: any) {
-        console.error(`[Composio] Action failed (${payload.actionName}):`, err?.message);
+        const msg = err?.message || String(err);
+        if (msg.toLowerCase().includes("connected account") || msg.toLowerCase().includes("not found")) {
+            console.error(`[Composio] ${slug}: No connected account. Run: npx ts-node scripts/composio-connect.ts`);
+        } else {
+            console.error(`[Composio] ${slug} failed:`, msg);
+        }
         return null;
     }
 }
@@ -55,74 +61,105 @@ export interface DealForEmail {
 }
 
 /**
- * Send deal summary email via Gmail using Composio
+ * Send deal summary email via Gmail (Composio)
  */
-export async function sendDealEmail(deal: DealForEmail): Promise<void> {
+export async function sendDealEmail(deal: DealForEmail): Promise<boolean> {
     const userEmail = process.env.USER_EMAIL;
     if (!userEmail) {
-        console.warn("[Composio] USER_EMAIL not set, skipping email");
-        return;
+        console.warn("[Composio] USER_EMAIL not set — skipping Gmail");
+        return false;
     }
 
     const subject = `🏆 ClawFin Deal Found: ${deal.productName} @ $${deal.effectivePrice.toFixed(2)}`;
-    const body = `Your ClawFin agent found you a deal!\n\n${deal.summaryText}\n\nNegotiated by ClawFin — powered by XMTP + OpenClaw`;
+    const body =
+        `Your ClawFin agent found you a deal!\n\n` +
+        `${deal.summaryText}\n\n` +
+        `---\nNegotiated by ClawFin — powered by XMTP + OpenClaw`;
 
     console.log("[Composio] Sending deal email to", userEmail);
-    await executeAction({
-        appName: "gmail",
-        actionName: "GMAIL_SEND_EMAIL",
-        input: {
-            to: userEmail,
-            subject,
-            body,
-        },
+    const result = await executeAction("GMAIL_SEND_EMAIL", {
+        recipient_email: userEmail,
+        subject,
+        body,
     });
-    console.log("[Composio] Email sent ✓");
+    if (result) console.log("[Composio] Gmail ✓");
+    return !!result;
 }
 
 /**
- * Log deal to Google Sheets via Composio
+ * Append deal row to Google Sheets (Composio)
+ * Columns: Timestamp | Product | Seller | Price | Card | Cashback | Effective | Saved
  */
-export async function logDealToSheets(deal: DealForEmail): Promise<void> {
-    const sheetId = process.env.DEAL_TRACKER_SHEET_ID;
-    if (!sheetId) {
-        console.warn("[Composio] DEAL_TRACKER_SHEET_ID not set, skipping Sheets log");
-        return;
+export async function logDealToSheets(deal: DealForEmail): Promise<boolean> {
+    const spreadsheetId = process.env.DEAL_TRACKER_SHEET_ID;
+    if (!spreadsheetId) {
+        console.warn("[Composio] DEAL_TRACKER_SHEET_ID not set — skipping Sheets");
+        return false;
     }
 
     console.log("[Composio] Logging deal to Google Sheets...");
-    await executeAction({
-        appName: "googlesheets",
-        actionName: "GOOGLESHEETS_SHEET_APPEND_ROW",
-        input: {
-            spreadsheetId: sheetId,
-            values: [
-                new Date().toISOString(),
-                deal.productName,
-                deal.winnerSeller,
-                deal.price.toFixed(2),
-                deal.cardUsed,
-                deal.cashbackAmount.toFixed(2),
-                deal.effectivePrice.toFixed(2),
-                deal.savings.toFixed(2),
-            ],
-        },
+    const result = await executeAction("GOOGLESHEETS_SHEET_APPEND_ROW", {
+        spreadsheet_id: spreadsheetId,
+        sheet_id: "Sheet1",
+        values: [
+            new Date().toISOString(),
+            deal.productName,
+            deal.winnerSeller,
+            deal.price.toFixed(2),
+            deal.cardUsed,
+            deal.cashbackAmount.toFixed(2),
+            deal.effectivePrice.toFixed(2),
+            deal.savings.toFixed(2),
+        ],
     });
-    console.log("[Composio] Sheets logged ✓");
+    if (result) console.log("[Composio] Sheets ✓");
+    return !!result;
 }
 
 /**
- * Run all post-deal actions (email + sheets) after negotiation completes
+ * Post deal notification to Slack (Composio)
+ */
+export async function postDealToSlack(deal: DealForEmail): Promise<boolean> {
+    const channel = process.env.SLACK_CHANNEL_ID;
+    if (!channel) {
+        console.warn("[Composio] SLACK_CHANNEL_ID not set — skipping Slack");
+        return false;
+    }
+
+    const text =
+        `🏷️ *ClawFin Deal Closed*\n` +
+        `*Product:* ${deal.productName}\n` +
+        `*Winner:* @${deal.winnerSeller}\n` +
+        `*Price:* $${deal.price.toFixed(2)} → $${deal.effectivePrice.toFixed(2)} effective (${deal.cardUsed})\n` +
+        `*Saved:* $${deal.savings.toFixed(2)}`;
+
+    console.log("[Composio] Posting deal to Slack...");
+    const result = await executeAction("SLACK_SEND_MESSAGE", {
+        channel,
+        text,
+    });
+    if (result) console.log("[Composio] Slack ✓");
+    return !!result;
+}
+
+/**
+ * Run all three post-deal actions in parallel after negotiation completes.
+ * Returns a summary string posted back to the Convos group chat.
  */
 export async function runPostDealActions(deal: DealForEmail): Promise<string> {
+    if (!process.env.COMPOSIO_API_KEY) {
+        return "\n(Composio not configured — set COMPOSIO_API_KEY to enable post-deal actions)";
+    }
+
     const results: string[] = [];
 
     await Promise.allSettled([
-        sendDealEmail(deal).then(() => results.push("📧 Deal summary sent to your email")),
-        logDealToSheets(deal).then(() => results.push("📊 Logged to your deal tracker spreadsheet")),
+        sendDealEmail(deal).then((ok) => { if (ok) results.push("📧 Deal summary sent to your email"); }),
+        logDealToSheets(deal).then((ok) => { if (ok) results.push("📊 Logged to your deal tracker"); }),
+        postDealToSlack(deal).then((ok) => { if (ok) results.push("💬 Posted to Slack"); }),
     ]);
 
     return results.length > 0
         ? `\n${results.join("\n")}`
-        : "\n(Composio integrations not configured)";
+        : "\n(Composio connected — check OAuth connections for Gmail/Sheets/Slack)";
 }
